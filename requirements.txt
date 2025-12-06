@@ -5,4 +5,6 @@ chromadb
 pypdf
 python-dotenv
 tiktoken
+langchain-huggingface
+sentence-transformers
 
