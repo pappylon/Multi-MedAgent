@@ -20,3 +20,17 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+venv/
+.venv/
+env/
+.env
+
+data/
+medical_db/
+
+__pycache__/
+*.py[cod]
+
+.DS_Store
+Thumbs.db
