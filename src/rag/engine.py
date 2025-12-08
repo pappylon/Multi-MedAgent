@@ -1,37 +1,11 @@
-# RAG + Prompt Engine
-
-from src.rag.loader import VectorDBLoader
-from langchain_core.prompts import PromptTemplate
+# src/rag/engine.py
 from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, HarmCategory
-
-MEDICAL_PROMPT_TEMPLATE = """
-You are a cautious and professional Medical AI Assistant.
-
-Use the provided context to answer the question.
-
-RULES:
-1. If the question is clear and the answer can be found in the context:
-   - Answer based on the context.
-2. If the question is unclear or missing necessary information:
-   - Politely ask a clarifying question to gather more details from the user.
-3. If the answer is not in the context:
-   - First, clearly state that the information was not found in the medical guidelines.
-   - Then, provide general medical guidance or examples in a professional tone.
-   - Always include a disclaimer: "This advice is for general reference only and does not constitute a medical diagnosis or professional consultation."
-4. Maintain a clinical, professional, and empathetic tone.
-
-
-Context:
-{context}
-
-Question:
-{question}
-
-Medical Answer:
-"""
+from langchain_core.prompts import PromptTemplate
+from src.rag.loader import VectorDBLoader
+from src.rag.config import MEDICAL_PROMPT_TEMPLATE  # ✅ 从配置文件导入
 
 class GeminiRAGEngine:
-    """RAG Engine using Google Gemini for medical QA"""
+    """RAG Engine using Google Gemini for medical QA with Memory"""
 
     def __init__(self, google_api_key: str, k: int = 5, temperature: float = 0):
         # 1️⃣ 加载向量数据库
@@ -39,8 +13,9 @@ class GeminiRAGEngine:
         self.retriever = loader.load_db()
 
         # 2️⃣ 初始化 Gemini LLM
+        # 建议：使用 standard 'gemini-2.5-flash' 进行更好的推理，如果不缺配额的话
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash", 
             google_api_key=google_api_key,
             temperature=temperature,
             safety_settings={
@@ -51,13 +26,13 @@ class GeminiRAGEngine:
             }
         )
 
-        # 3️⃣ Prompt 模板
+        # 3️⃣ Prompt 模板 (增加了 chat_history)
         self.prompt = PromptTemplate(
             template=MEDICAL_PROMPT_TEMPLATE,
-            input_variables=["context", "question"]
+            input_variables=["context", "chat_history", "question"]
         )
 
-    def answer_question(self, question: str) -> str:
+    def answer_question(self, question: str, chat_history: list = None) -> str:
         # 检索相关文档
         docs = self.retriever.invoke(question)
         if not docs:
@@ -66,8 +41,21 @@ class GeminiRAGEngine:
         # 拼接上下文
         context_text = "\n\n---\n\n".join(getattr(d, "page_content", str(d)) for d in docs)
 
+        # ✅ 处理历史记录：将列表转换为字符串
+        history_text = ""
+        if chat_history:
+            # 只取最近 3 轮对话，避免 Token 溢出
+            for role, text in chat_history[-6:]:
+                history_text += f"{role}: {text}\n"
+        else:
+            history_text = "No previous conversation."
+
         # 构造 Prompt
-        full_prompt = self.prompt.format(context=context_text, question=question)
+        full_prompt = self.prompt.format(
+            context=context_text, 
+            chat_history=history_text, 
+            question=question
+        )
 
         # 调用 Gemini
         resp = self.llm.invoke(full_prompt)
