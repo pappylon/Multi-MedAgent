@@ -1,9 +1,9 @@
 # loader.py — 加载向量数据库
 
 import os
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma   # 新版导入
 from langchain_huggingface import HuggingFaceEmbeddings
-from src.config import CHROMA_PATH
+from config import CHROMA_PATH
 
 class VectorDBLoader:
     """加载 Chroma 向量数据库并提供检索器"""
@@ -19,6 +19,8 @@ class VectorDBLoader:
     def load_db(self):
         if not os.path.exists(self.persist_dir):
             raise FileNotFoundError(f"Chroma 数据库目录不存在: {self.persist_dir}")
+        
+        # 新版 Chroma 初始化
         self.db = Chroma(persist_directory=self.persist_dir, embedding_function=self.embeddings)
         self.retriever = self.db.as_retriever(search_kwargs={"k": self.k})
         return self.retriever
