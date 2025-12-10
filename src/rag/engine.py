@@ -1,8 +1,8 @@
 # src/rag/engine.py
 from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 from langchain_core.prompts import PromptTemplate
-from src.rag.loader import VectorDBLoader
-from src.rag.config import MEDICAL_PROMPT_TEMPLATE  # ✅ 从配置文件导入
+from rag.loader import VectorDBLoader
+from rag.config import MEDICAL_PROMPT_TEMPLATE  # ✅ 从配置文件导入
 
 class GeminiRAGEngine:
     """RAG Engine using Google Gemini for medical QA with Memory"""
