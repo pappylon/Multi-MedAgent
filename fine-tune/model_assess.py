@@ -38,10 +38,6 @@ print(f"模型: {MODEL_ID}")
 print(f"设备: {DEVICE}")
 print(f"最大生成 Token 数: {MAX_NEW_TOKENS}\n")
 
-## --- 1. 加载模型和分词器 ---
-# ⚠️ 注意：如果您在 GPU 显存不足 (如低于 40GB) 的情况下，
-# 可以取消注释以下代码块，使用 4-bit 量化加载模型以节省资源。
-
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -59,7 +55,6 @@ try:
         cache_dir=CACHE_DIR,
     ).to(DEVICE)
 
-    # 定义 Llama 3 的终止符
     TERMINATORS = [
         tokenizer.eos_token_id,
         tokenizer.convert_tokens_to_ids("<|eot_id|>")
@@ -133,8 +128,6 @@ attention_mask = inputs['attention_mask']
 
 # attention_mask = torch.ones_like(input_ids).to(model.device)
 
-## --- 3. 性能评测 ---
-# 确保 GPU 预热，以获得更准确的计时
 if DEVICE == "cuda":
     _ = model.generate(input_ids[0:1, :], max_new_tokens=MAX_NEW_TOKENS)
     torch.cuda.synchronize()

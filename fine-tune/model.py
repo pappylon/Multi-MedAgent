@@ -13,7 +13,8 @@ import logging
 
 #huggingface拉取模型的token
 def init_huggingface_token():
-    TOKEN = "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"
+    # init OWN huggingface token
+    TOKEN = ""
     from huggingface_hub import login
     login(token=TOKEN)
 
