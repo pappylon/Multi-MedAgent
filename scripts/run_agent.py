@@ -52,8 +52,8 @@ def run_cli(engine):
             print(textwrap.fill(answer, width=80))
 
             # 更新历史记录
-            chat_history.append(("User", query))
-            chat_history.append(("AI", answer))
+            chat_history.append(("user", query))
+            chat_history.append(("assistant", answer))
 
         except KeyboardInterrupt:
             print("\n\n👋 程序被终止")

@@ -67,24 +67,21 @@ if prompt := st.chat_input("Please describe your symptoms or concerns..."):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # 2. 调用 AI
+
     if engine:
         with st.chat_message("assistant"):
             placeholder = st.empty()
-            # 提示语改一下
             placeholder.markdown("⏳ *Local Model is thinking...*")
 
             try:
-                # 转换历史格式
+
                 history_for_engine = [
                     ("User" if m["role"] == "user" else "AI", m["content"])
                     for m in st.session_state.messages[:-1]
                 ]
 
-                # 获取回答
                 response = engine.answer_question(prompt, history_for_engine)
 
-                # 显示并保存
                 placeholder.markdown(response)
                 st.session_state.messages.append(
                     {"role": "assistant", "content": response}

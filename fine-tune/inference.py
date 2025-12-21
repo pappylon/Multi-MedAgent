@@ -8,7 +8,7 @@ from peft import PeftModel
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 
 def load_local_model():
-    print(f"⏳ [System]: 正在初始化模型路径...")
+    # print(f"⏳ [System]: 正在初始化模型路径...")
     
     # 1. 定义路径
     # 基础模型路径
@@ -30,37 +30,16 @@ def load_local_model():
 
     try:
         # 2. 加载 Tokenizer
-        print(f"📂 加载 Tokenizer...")
+        # print(f"📂 加载 Tokenizer...")
         
         tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
-        # if 'llama' in MODEL_NAME.lower():
-        # tokenizer.padding_side = "right"
-        # tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.truncation_side = 'left'
-        if tokenizer.chat_template and "generation" not in tokenizer.chat_template:
-            tokenizer.chat_template(
-                "{% set loop_messages = messages %}"
-                "{% for message in loop_messages %}"
-                "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
-                "{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}"
-                "{% if message['role'] == 'assistant' %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-                "{% generation %}"
-                "{{ message['content'] | trim + '<|eot_id|>' }}"
-                "{% endgeneration %}"
-                "{% else %}"
-                "{{ content }}"
-                "{% endif %}"
-                "{% endfor %}"
-                "{% if add_generation_prompt %}"
-                "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
-                "{% endif %}"
-            )
+
 
         # 3. 加载基础模型 (应用 4-bit 量化)
-        print(f"📂 加载基础模型 (4-bit Quantization)...")
+        # print(f"📂 加载基础模型 (4-bit Quantization)...")
         
         # Windows 兼容性处理：
         # 如果是 CPU 模式，不能用 4-bit 量化；如果是 GPU，尝试加载
@@ -92,10 +71,9 @@ def load_local_model():
 
         # 4. 加载 LoRA 微调参数
         if os.path.exists(adapter_path):
-            print(f"🔗 正在挂载 LoRA 微调参数: {os.path.basename(adapter_path)} ...")
             try:
                 model = PeftModel.from_pretrained(model, adapter_path)
-                print("✅ LoRA 微调参数加载成功！(医疗模式已激活)")
+                # print("✅ LoRA 微调参数加载成功！(医疗模式已激活)")
             except Exception as e:
                 print(f"⚠️ LoRA 加载报错: {e}")
         else:
@@ -114,10 +92,34 @@ def generate_local_response(model, tokenizer, device, formatted_prompt_text):
     try:
         # Llama-3 官方格式封装 (可选，取决于你微调时有没有加这个)
         # 如果你微调时直接用的 ### Instruction 格式，可以把下面这行 f-string 去掉，直接用 formatted_prompt_text
-        final_input = f"<start_of_turn>user\n{formatted_prompt_text}<end_of_turn>\n<start_of_turn>model\n"
+        # final_input = f"<start_of_turn>user\n{formatted_prompt_text}<end_of_turn>\n<start_of_turn>model\n"
 
-        inputs = tokenizer(final_input, return_tensors="pt").to(model.device)
+        tokenizer.truncation_side = 'left'
+        if tokenizer.chat_template and "generation" not in tokenizer.chat_template:
+            tokenizer.chat_template(
+                "{% set loop_messages = messages %}"
+                "{% for message in loop_messages %}"
+                "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
+                "{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}"
+                "{% if message['role'] == 'assistant' and loop.last %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+                "{% generation %}"
+                "{{ message['content'] | trim + '<|eot_id|>' }}"
+                "{% endgeneration %}"
+                "{% else %}"
+                "{{ content }}"
+                "{% endif %}"
+                "{% endfor %}"
+                "{% if add_generation_prompt %}"
+                "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+                "{% endif %}"
+            )
+        inputs = tokenizer(formatted_prompt_text, return_tensors="pt").to(model.device)
         
+        # inputs = tokenizer.apply_chat_template(
+        #     return_tensor="pt",
+        #     add_generation_prompt=False,
+        # ).to(model.device)
+
         # skip_prompt=True
         # 它会自动计算输入有多长，输出时只显示模型新生成的部分
         streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
@@ -142,7 +144,10 @@ def generate_local_response(model, tokenizer, device, formatted_prompt_text):
         
 
         for new_text in streamer:
-            clean_text = new_text.replace("### Output:", "").replace("###", "").strip()
+            # clean_text = new_text.replace("### Output:", "").replace("###", "").strip()
+
+            clean_text = new_text.strip()
+            print(clean_text)
             
             if not clean_text:
                 continue

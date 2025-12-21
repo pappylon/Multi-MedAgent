@@ -189,18 +189,29 @@ class LocalLLMEngine:
             input_variables=["chat_history", "question"]
         )
 
+
     def answer_question(self, question: str, chat_history: list = None) -> str:
         """
         直接调用大模型进行回答，不进行检索
         """
         # 1. 格式化历史记录
         history_text = "None"
+        total_input = []
+        total_input.append({"role": "system", "content": "You are a helpful and professional medical assistant. "
+        "Answer the user's question based on your internal knowledge. "
+        "Be concise, safe, and empathetic"
+        })
+        history_list = []
         if chat_history:
             # 拼接最近 6 条记录
             history_text = ""
             for role, text in chat_history[-6:]:
                 history_text += f"{role}: {text}\n"
+                history_list.append({"role": role, "content":text})
 
+        # total_input.extend(history_list)
+        # total_input.append({"role": "user", "content": question})
+        # total_input.extend(history_list)
         # 2. 填充 Prompt (注意：这里不需要 context 参数了)
         full_prompt = self.prompt.format(
             chat_history=history_text, 
@@ -208,6 +219,9 @@ class LocalLLMEngine:
         )
         
         print(f"🤖 [LocalLLM] Generating response for: {question}")
+
+        print("\n*****************" + full_prompt + "******************\n")
+
 
         # 3. 检查生成函数是否存在
         if generate_local_response is None:
