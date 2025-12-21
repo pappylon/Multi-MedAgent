@@ -15,8 +15,8 @@ SRC_DIR = BASE_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 # ✅ 改动 1: 导入本地引擎
-# from rag.engine import LocalRAGEngine 
-from rag.engine import GeminiRAGEngine
+from rag.engine import LocalRAGEngine 
+# from rag.engine import GeminiRAGEngine
 
 # -------------------------------
 # 加载环境变量
@@ -69,8 +69,8 @@ def main():
     
     try:
         # 这里不需要传入 api_key
-        # engine = LocalRAGEngine(k=3)
-        engine = GeminiRAGEngine(google_api_key=GOOGLE_API_KEY)
+        engine = LocalRAGEngine(k=3)
+        # engine = GeminiRAGEngine(google_api_key=GOOGLE_API_KEY)
         run_cli(engine)
     except Exception as e:
         print(f"❌ 引擎启动失败: {e}")

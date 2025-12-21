@@ -34,10 +34,10 @@ def build():
     
     print(f"✅ 成功加载 {len(documents)} 页文档。")
 
-    # 切分文档
+
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_documents(documents)
-    print(f"✂️  文档已切分为 {len(chunks)} 个片段。")
+
     
     # 入库 (使用本地免费模型)
     print(f"💾 正在使用本地模型(HuggingFace)生成向量... (第一次运行需下载模型，请耐心等待)")

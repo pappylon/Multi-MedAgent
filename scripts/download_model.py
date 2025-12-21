@@ -28,7 +28,7 @@ def main():
     model_id = "meta-llama/Meta-Llama-3-8B"
     
     # 将模型下载到项目根目录下的 models 文件夹中
-    local_dir = os.path.join(PROJECT_ROOT, "models", "Meta-Llama-3-8B")
+    local_dir = os.path.join(PROJECT_ROOT, "models", "gpu_med_full_model")
 
     print(f"🚀 开始下载模型: {model_id}")
     print(f"📂 保存目标路径: {local_dir}")

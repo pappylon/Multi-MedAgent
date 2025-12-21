@@ -23,6 +23,7 @@ cryptography
 pydantic
 pydantic-settings
 pydantic_core
+peft
 
 requests
 httpx

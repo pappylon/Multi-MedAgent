@@ -1,90 +1,144 @@
 import os
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from threading import Thread
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer, BitsAndBytesConfig
+from peft import PeftModel
 
 # 获取项目根目录
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 
 def load_local_model():
-    print(f"⏳ [System]: gpu_med_full_model ...")
+    print(f"⏳ [System]: 正在初始化模型路径...")
     
-    model_path = os.path.join(PROJECT_ROOT, "models", "gpu_med_full_model")
+    # 1. 定义路径
+    # 基础模型路径
+    base_model_path = os.path.join(PROJECT_ROOT, "models", "gpu_med_full_model")
+    # LoRA 适配器路径
+    adapter_path = os.path.join(base_model_path, "lora_medquad_1_epoch")
 
     # ====================================================
-    # 🧠 智能设备选择逻辑 (关键修改)
+    # 🧠 智能设备与量化配置 (与队友 run.py 保持一致)
     # ====================================================
-    if torch.cuda.is_available():
-        # 情况 A: Windows 电脑 (有 NVIDIA 显卡)
-        device = "cuda"
-        torch_dtype = torch.float16 # GPU 上用 fp16 既快又省显存
-        print("✅ 检测到 CUDA 设备，启用 GPU 加速模式")
-        
-    elif torch.backends.mps.is_available():
-        # 情况 B: 你的 Mac 电脑
-        # 虽然 Mac 有 MPS 加速，但因为模型文件太大 (14GB)，会导致 Buffer 溢出报错
-        # 所以针对 Mac，我们强制降级到 CPU
-        device = "cpu" 
-        torch_dtype = torch.float32 # CPU 用 float32 兼容性最好
-        print("⚠️ 检测到 Mac MPS，但模型过大 (14GB+)，强制切换至 CPU 模式以避开 Metal 限制。")
-        print("💡 提示：本地推理速度会较慢，这是正常的。")
-        
-    else:
-        # 情况 C: 普通电脑 (无显卡)
-        device = "cpu"
-        torch_dtype = torch.float32
-        print("⚠️ 未检测到 GPU，使用 CPU 模式。")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    # 定义 4-bit 量化配置 (QLoRA 核心)
+    # 这能大幅降低显存占用 (16GB -> 6GB)，并解决 OOM 崩溃问题
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16, # 显卡如果较老(如10系列)，可能需要改为 torch.float16
+        bnb_4bit_use_double_quant=False,
+    )
 
     try:
-        # 加载 Tokenizer
+        # 2. 加载 Tokenizer
         print(f"📂 加载 Tokenizer...")
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
 
-        # 加载模型
-        print(f"📂 加载模型权重...")
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            device_map=device,           # 智能分配 (Win->cuda, Mac->cpu)
-            torch_dtype=torch_dtype,     # 智能类型 (Win->fp16, Mac->fp32)
-            trust_remote_code=True,
-            low_cpu_mem_usage=True
-        )
+        # 3. 加载基础模型 (应用 4-bit 量化)
+        print(f"📂 加载基础模型 (4-bit Quantization)...")
+        
+        # Windows 兼容性处理：
+        # 如果是 CPU 模式，不能用 4-bit 量化；如果是 GPU，尝试加载
+        if device == "cuda":
+            try:
+                model = AutoModelForCausalLM.from_pretrained(
+                    base_model_path,
+                    quantization_config=bnb_config, # ✅ 应用队友的量化配置
+                    device_map="auto",              # 让 accelerate 自动分配设备
+                    trust_remote_code=True
+                )
+            except ImportError:
+                print("⚠️ 未检测到 bitsandbytes 库或不支持 4-bit，回退到 FP16 模式...")
+                model = AutoModelForCausalLM.from_pretrained(
+                    base_model_path,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
+                    trust_remote_code=True
+                )
+        else:
+            # CPU 模式
+            print("⚠️ 使用 CPU 模式 (速度较慢)...")
+            model = AutoModelForCausalLM.from_pretrained(
+                base_model_path,
+                device_map="cpu",
+                torch_dtype=torch.float32,
+                trust_remote_code=True
+            )
 
-        print("✅ 本地模型加载成功！")
+        # 4. 加载 LoRA 微调参数
+        if os.path.exists(adapter_path):
+            print(f"🔗 正在挂载 LoRA 微调参数: {os.path.basename(adapter_path)} ...")
+            try:
+                model = PeftModel.from_pretrained(model, adapter_path)
+                print("✅ LoRA 微调参数加载成功！(医疗模式已激活)")
+            except Exception as e:
+                print(f"⚠️ LoRA 加载报错: {e}")
+        else:
+            print(f"\n❌ [警告] 找不到 LoRA 路径: {adapter_path}，将仅使用基础模型。")
+
         return model, tokenizer, device
 
     except Exception as e:
         print(f"❌ 模型加载失败: {e}")
         return None, None, None
     
-def generate_local_response(model, tokenizer, device, prompt_text):
-    """生成回答 (增强版)"""
-    inputs = tokenizer(prompt_text, return_tensors="pt").to(device)
+def generate_local_response(model, tokenizer, device, formatted_prompt_text):
+    """
+    接收已经填充好的完整 Prompt，流式输出后续内容
+    """
+    try:
+        # Llama-3 官方格式封装 (可选，取决于你微调时有没有加这个)
+        # 如果你微调时直接用的 ### Instruction 格式，可以把下面这行 f-string 去掉，直接用 formatted_prompt_text
+        final_input = f"<start_of_turn>user\n{formatted_prompt_text}<end_of_turn>\n<start_of_turn>model\n"
 
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=256,
+        inputs = tokenizer(final_input, return_tensors="pt").to(model.device)
+        
+        # skip_prompt=True
+        # 它会自动计算输入有多长，输出时只显示模型新生成的部分
+        streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+        
+        generation_kwargs = dict(
+            input_ids=inputs.input_ids,
+            attention_mask=inputs.attention_mask,
+            streamer=streamer,
+            max_new_tokens=512, 
             do_sample=True,
-            temperature=0.3, # 降低温度，让重写更稳定
+            temperature=0.2, # 医疗建议严谨一点，温度低一点
             top_p=0.9,
             pad_token_id=tokenizer.eos_token_id
         )
-    
-    # 解码
-    full_response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    # ✅ 增强解析逻辑
-    # 1. 尝试按标准格式截取
-    if "### Output:" in full_response:
-        return full_response.split("### Output:")[-1].strip()
-    
-    # 2. 如果模型没写 Output 标签，尝试去掉 Prompt 本身
-    # (有些模型会把 Prompt 复述一遍)
-    if full_response.startswith(prompt_text):
-        return full_response[len(prompt_text):].strip()
         
-    # 3. 实在没办法，返回原来的全部内容 (总比返回空好)
-    return full_response.strip()
+        thread = Thread(target=model.generate, kwargs=generation_kwargs)
+        thread.start()
+        
+        print("🤖 [AI]: ", end="", flush=True)
+        
+        full_response = ""
+        
+        # ✅ 极简循环
+        # 因为 skip_prompt 已经帮你把 Context 那些过滤了，这里出来的全是纯干货
+        for new_text in streamer:
+            # 再次清洗一下，以防模型抽风把 Output 标签也打出来
+            clean_text = new_text.replace("### Output:", "").replace("###", "").strip()
+            
+            if not clean_text:
+                continue
+                
+            print(new_text, end="", flush=True) # 打印原始流式文本保持流畅
+            full_response += new_text
+
+        print() # 换行
+        return full_response.strip()
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return ""
+
+if __name__ == "__main__":
+    m, t, d = load_local_model()
+    if m:
+        generate_local_response(m, t, d, "I have a headache")

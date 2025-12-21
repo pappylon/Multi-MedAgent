@@ -12,7 +12,8 @@ SRC_DIR = BASE_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 
-from rag.engine import GeminiRAGEngine
+# from rag.engine import GeminiRAGEngine
+from rag.engine import LocalRAGEngine
 
 # --------------------------------
 # 加载环境变量
@@ -37,7 +38,7 @@ def get_engine():
     with st.spinner("正在加载本地微调模型 (约需 1-2 分钟，请耐心等待)..."):
         try:
             # ✅ 改动 3: 实例化本地引擎
-            return GeminiRAGEngine(k=3)
+            return LocalRAGEngine(k=5)
         except Exception as e:
             st.error(f"❌ 模型加载失败: {e}")
             return None
@@ -59,7 +60,7 @@ for msg in st.session_state.messages:
 # --------------------------------
 # 处理用户输入
 # --------------------------------
-if prompt := st.chat_input("请描述您的症状或问题..."):
+if prompt := st.chat_input("Please describe your symptoms or concerns..."):
     # 1. 显示用户消息
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -89,6 +90,6 @@ if prompt := st.chat_input("请描述您的症状或问题..."):
                 )
 
             except Exception as e:
-                placeholder.error(f"❌ 运行错误：{e}")
+                placeholder.error(f"❌Runtime error:{e}")
     else:
-        st.error("⚠️ 引擎未初始化，无法回答。请检查模型路径。")
+        st.error("⚠️ The engine has not been initialized and cannot respond. Please check the model path.")

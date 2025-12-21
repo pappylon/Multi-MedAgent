@@ -8,7 +8,7 @@ from config import CHROMA_PATH
 class VectorDBLoader:
     """加载 Chroma 向量数据库并提供检索器"""
 
-    def __init__(self, persist_dir=CHROMA_PATH, embedding_model_name="all-MiniLM-L6-v2", k=5):
+    def __init__(self, persist_dir=CHROMA_PATH, embedding_model_name="./models/all-MiniLM-L6-v2", k=5):
         self.persist_dir = persist_dir
         self.embedding_model_name = embedding_model_name
         self.k = k
