@@ -13,7 +13,8 @@ sys.path.insert(0, str(SRC_DIR))
 
 
 # from rag.engine import GeminiRAGEngine
-from rag.engine import LocalRAGEngine
+from rag.engine import LocalLLMEngine
+
 
 # --------------------------------
 # 加载环境变量
@@ -38,7 +39,7 @@ def get_engine():
     with st.spinner("正在加载本地微调模型 (约需 1-2 分钟，请耐心等待)..."):
         try:
             # ✅ 改动 3: 实例化本地引擎
-            return LocalRAGEngine(k=5)
+            return LocalLLMEngine()
         except Exception as e:
             st.error(f"❌ 模型加载失败: {e}")
             return None

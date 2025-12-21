@@ -13,12 +13,10 @@ def load_local_model():
     # 1. 定义路径
     # 基础模型路径
     base_model_path = os.path.join(PROJECT_ROOT, "models", "gpu_med_full_model")
+
     # LoRA 适配器路径
     adapter_path = os.path.join(base_model_path, "lora_medquad_1_epoch")
 
-    # ====================================================
-    # 🧠 智能设备与量化配置 (与队友 run.py 保持一致)
-    # ====================================================
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     # 定义 4-bit 量化配置 (QLoRA 核心)
@@ -33,10 +31,33 @@ def load_local_model():
     try:
         # 2. 加载 Tokenizer
         print(f"📂 加载 Tokenizer...")
+        
         tokenizer = AutoTokenizer.from_pretrained(base_model_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
+        # if 'llama' in MODEL_NAME.lower():
+        # tokenizer.padding_side = "right"
+        # tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.truncation_side = 'left'
+        if tokenizer.chat_template and "generation" not in tokenizer.chat_template:
+            tokenizer.chat_template(
+                "{% set loop_messages = messages %}"
+                "{% for message in loop_messages %}"
+                "{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n'+ message['content'] | trim + '<|eot_id|>' %}"
+                "{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}"
+                "{% if message['role'] == 'assistant' %}{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+                "{% generation %}"
+                "{{ message['content'] | trim + '<|eot_id|>' }}"
+                "{% endgeneration %}"
+                "{% else %}"
+                "{{ content }}"
+                "{% endif %}"
+                "{% endfor %}"
+                "{% if add_generation_prompt %}"
+                "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+                "{% endif %}"
+            )
 
         # 3. 加载基础模型 (应用 4-bit 量化)
         print(f"📂 加载基础模型 (4-bit Quantization)...")
@@ -105,9 +126,9 @@ def generate_local_response(model, tokenizer, device, formatted_prompt_text):
             input_ids=inputs.input_ids,
             attention_mask=inputs.attention_mask,
             streamer=streamer,
-            max_new_tokens=512, 
+            max_new_tokens=128, 
             do_sample=True,
-            temperature=0.2, # 医疗建议严谨一点，温度低一点
+            temperature=0.2,
             top_p=0.9,
             pad_token_id=tokenizer.eos_token_id
         )
@@ -119,10 +140,8 @@ def generate_local_response(model, tokenizer, device, formatted_prompt_text):
         
         full_response = ""
         
-        # ✅ 极简循环
-        # 因为 skip_prompt 已经帮你把 Context 那些过滤了，这里出来的全是纯干货
+
         for new_text in streamer:
-            # 再次清洗一下，以防模型抽风把 Output 标签也打出来
             clean_text = new_text.replace("### Output:", "").replace("###", "").strip()
             
             if not clean_text:

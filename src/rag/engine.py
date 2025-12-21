@@ -7,7 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, H
 
 # 导入配置和加载器
 from rag.loader import VectorDBLoader
-from rag.config import MEDICAL_PROMPT_TEMPLATE, REWRITE_PROMPT_TEMPLATE
+from rag.config import MEDICAL_PROMPT_TEMPLATE, REWRITE_PROMPT_TEMPLATE, DIRECT_CHAT_TEMPLATE
 
 # ========================================================
 # 1. 关键修复：强制优先加载 fine-tune 路径
@@ -112,8 +112,8 @@ class LocalRAGEngine:
             raise ImportError("inference.py not found. Please check the fine-tune directory.")
             
         print("Initializing RAG Retriever......")
-        loader = VectorDBLoader(k=k)
-        self.retriever = loader.load_db()
+        # loader = VectorDBLoader(k=k)
+        # self.retriever = loader.load_db()
         
         print("Load local model...")
         self.model, self.tokenizer, self.device = load_local_model()
@@ -167,4 +167,54 @@ class LocalRAGEngine:
             return "Internal error: The generate_local_response function has not been loaded."
             
         response = generate_local_response(self.model, self.tokenizer, self.device, full_prompt)
+        return response
+    
+class LocalLLMEngine:
+    def __init__(self):
+        if not LOCAL_MODEL_AVAILABLE:
+            raise ImportError("inference.py not found. Please check the fine-tune directory.")
+            
+        print("🚀 [LocalLLM] Initializing Direct Local Model (No RAG)...")
+        
+        # ❌ 不加载 VectorDBLoader
+        # self.retriever = ... (不需要)
+        
+        print("Load local model...")
+        # 复用 inference.py 里的加载函数
+        self.model, self.tokenizer, self.device = load_local_model()
+        
+        # 使用纯对话模板
+        self.prompt = PromptTemplate(
+            template=DIRECT_CHAT_TEMPLATE, 
+            input_variables=["chat_history", "question"]
+        )
+
+    def answer_question(self, question: str, chat_history: list = None) -> str:
+        """
+        直接调用大模型进行回答，不进行检索
+        """
+        # 1. 格式化历史记录
+        history_text = "None"
+        if chat_history:
+            # 拼接最近 6 条记录
+            history_text = ""
+            for role, text in chat_history[-6:]:
+                history_text += f"{role}: {text}\n"
+
+        # 2. 填充 Prompt (注意：这里不需要 context 参数了)
+        full_prompt = self.prompt.format(
+            chat_history=history_text, 
+            question=question
+        )
+        
+        print(f"🤖 [LocalLLM] Generating response for: {question}")
+
+        # 3. 检查生成函数是否存在
+        if generate_local_response is None:
+            return "Internal error: The generate_local_response function has not been loaded."
+            
+        # 4. 调用 inference.py 进行生成
+        # 注意：generate_local_response 会自动加上 <start_of_turn>user 等标签
+        response = generate_local_response(self.model, self.tokenizer, self.device, full_prompt)
+        
         return response
